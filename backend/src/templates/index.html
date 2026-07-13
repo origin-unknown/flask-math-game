@@ -99,7 +99,7 @@
 				document.getElementById('messages').append(li);
 			});
 
-			socket.on('room_state', data => {
+			socket.on('room', data => {
 				if (data.state === 'open') {
 					document.querySelector('#stage').innerHTML = `
 						<div class="waiting-screen active">
@@ -159,7 +159,7 @@
 					event.preventDefault();
 					const formData = new FormData(event.target);
 					const message = formData.get('msg');
-					socket.emit('send_message', {message});
+					socket.emit('message', {message});
 					event.target.reset();
 				}); 
 

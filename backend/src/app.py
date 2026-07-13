@@ -4,19 +4,36 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 from models import Match as _Match, Room, User
 
 
-app = Flask(__name__)
+app = Flask(__name__, 
+    static_url_path='', 
+)
+
 app.config.from_mapping(
 	SECRET_KEY='your secret here', 
 	SESSION_TYPE='filesystem' 
 )
-socketio = SocketIO(app)
 
+socketio = SocketIO(app,
+	manage_session=True, 
+	cors_allowed_origins=[
+		'http://127.0.0.1:5000', 
+		'http://localhost:5173', 
+	]
+)
 
 @app.route('/')
 def index():
-	session.clear()
+	return app.send_static_file('index.html')
+
+@app.route('/dev')
+def dev_index():
+	session.clear() # deprecated 
 	return render_template('index.html') 
 
+
+@socketio.on('connect')
+def on_connect():
+	session.clear()
 
 @socketio.on('disconnect')
 def on_disconnect():
@@ -29,7 +46,20 @@ def on_disconnect():
 		user and room.remove_member(user)
 
 		if room.is_open:
-			emit('room_state', { 'state': 'open', 'code': room.code }, room=room.code)
+			emit('room', 
+				{ 
+					'state': 'open', 
+					'code': room.code, 
+					'members': [
+						{ 
+							'sid': m.sid, 
+							'username': m.username, 
+							'points': m.points
+						} for m in room._members.values()
+					] 
+				}, 
+				room=room.code
+			)
 			room.is_empty and room.remove()
 
 		emit('message', {'msg': f'{user.username} has left room {room.code}'}, room=room.code)
@@ -47,8 +77,10 @@ def on_join(data):
 
 	if not username:
 		return
-
-	user = User.find_by_sid(request.sid) or User.create(sid=request.sid, username=username)
+	
+	user = User.find_by_sid(request.sid) 
+	if user: user.remove()
+	user = User.create(sid=request.sid, username=username)
 
 	room = None
 	if roomcode:
@@ -66,10 +98,24 @@ def on_join(data):
 	emit('message', {'msg': f'{user.username} has joined room {room.code}'}, room=room.code)
 
 	if room.is_closed:
-		emit('room_state', { 'state': 'closed', 'code': room.code }, room=room.code)
-
 		# Start the match here!
 		room.reset_points()
+
+		emit('room', 
+			{ 
+				'state': 'closed', 
+				'code': room.code, 
+				'members': [
+					{ 
+						'sid': m.sid, 
+						'username': m.username, 
+						'points': m.points
+					} for m in room._members.values()
+				] 
+			}, 
+			room=room.code
+		)
+		
 		task, attempts, success = room.create_task(), 0, False
 		emit('task', 
 			{
@@ -79,10 +125,24 @@ def on_join(data):
 			}, 
 			room=room.code
 		)
-		emit('user', { 'points': 0 }, room=room.code)
-	else:
-		emit('room_state', { 'state': 'open', 'code': room.code }, room=room.code)
+		emit('user', { 'username': user.username, 'sid': user.sid, 'points': user.points }, room=room.code)
 
+	else:
+		emit('room', 
+			{ 
+				'state': 'open', 
+				'code': room.code, 
+				'members': [
+					{ 
+						'sid': m.sid, 
+						'username': m.username, 
+						'points': m.points
+					} for m in room._members.values()
+				] 
+			}, 
+			room=room.code
+		)
+		emit('user', { 'username': user.username, 'sid': user.sid, 'points': user.points }, room=room.code)
 
 @socketio.on('leave')
 def on_leave(data):
@@ -94,16 +154,30 @@ def on_leave(data):
 
 	room.remove_member(user)
 	if room.is_open:
-		emit('room_state', { 'state': 'open', 'code': room.code }, room=room.code)
+		emit('room', 
+			{ 
+				'state': 'open', 
+				'code': room.code, 
+				'members': [
+					{ 
+						'sid': m.sid, 
+						'username': m.username, 
+						'points': m.points
+					} for m in room._members.values()
+				] 
+			}, 
+			room=room.code
+		)
 
 	leave_room(room.code)
 
 	room.is_empty and room.remove()
 
+	emit('user', { 'username': '', 'sid': user.sid, 'points': user.points }, room=user.sid)
 	emit('message', {'msg': f'{user.username} has left room {room.code}'}, room=room.code)
 
 
-@socketio.on('send_message')
+@socketio.on('message')
 def room_message(data):
 	room = Room.find_by_code(session.get('code'))
 	if room is None:
@@ -136,7 +210,8 @@ def on_solve(data):
 	)
 	if success:
 		user.points += 10
-		emit('user', { 'points': user.points }, room=user.sid)
+		emit('user', { 'username': user.username, 'sid': user.sid, 'points': user.points }, room=room.code) #user.sid)
+		# <- room ?
 
 
 if __name__ == "__main__":
