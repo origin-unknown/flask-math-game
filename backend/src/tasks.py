@@ -10,8 +10,7 @@ def get_2_ints(_from: int = 1, _to: int = 10) -> list[int]:
     return [random.randint(_from, _to), random.randint(_from, _to)]
 
 class Task():
-    ''' parent class for all the different Tasks available
-    '''
+    ''' parent class for all the different Tasks available'''
 
 class Multiply(Task):
     def __init__(self, a, b):
