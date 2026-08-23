@@ -1,5 +1,6 @@
-import random, secrets, string
+import secrets, string
 from tasks import Task, TaskType, choose_task
+from threading import Lock, RLock
 from typing import Any, ClassVar, Self
 
 
@@ -8,6 +9,7 @@ class User:
 		self._sid = sid
 		self._username = username
 		self._points = points
+		self._lock = Lock()
 
 	@property
 	def sid(self) -> str:
@@ -19,30 +21,42 @@ class User:
 	
 	@property
 	def points(self) -> int:
-		return self._points
+		with self._lock:
+			return self._points
 	
 	@points.setter
 	def points(self, value: int) -> None:
-		self._points = value
+		with self._lock:
+			self._points = value
+
+	def add_points(self, amount: int) -> None:
+		with self._lock:
+			self._points += amount
 
 	def remove(self) -> None:
-		type(self).all_users.pop(self.sid, None)
+		with type(self)._user_lock:
+			type(self).all_users.pop(self.sid, None)
 
+	_user_lock: ClassVar[Lock] = Lock()
 	all_users: ClassVar[dict[str, User]] = {}
 
 	@classmethod
 	def create(cls, sid: str, username: str, points: int=0) -> Self:
-		obj = cls(sid, username, points)
-		cls.all_users[sid] = obj
-		return obj
+		with cls._user_lock:
+			obj = cls(sid, username, points)
+			cls.all_users[sid] = obj
+			return obj
 
 	@classmethod
 	def find_by_sid(cls, sid: str) -> User | None:
-		return cls.all_users.get(sid)
+		with cls._user_lock:
+			return cls.all_users.get(sid)
 
 	@classmethod
 	def find_by_username(cls, username: str) -> User | None:
-		return next((u for u in cls.all_users.values() if u.username == username), None)
+		with cls._user_lock:
+			return next((u for u in cls.all_users.values() if u.username == username), None)
+
 
 MAX_ROOM_MEMBERS = 2
 
@@ -56,6 +70,7 @@ class Room:
 	def __init__(self, code: str) -> None:
 		self._code = code
 		self._members: dict[str, User] = {} 
+		self._lock = RLock() 
 
 	def __len__(self) -> int:
 		return len(self._members)
@@ -77,29 +92,44 @@ class Room:
 		return len(self) < MAX_ROOM_MEMBERS
 
 	@property
+	def members(self) -> dict[str, User]:
+		with self._lock:
+			return self._members.copy()
+	
+	@property
 	def task_type(self) -> TaskType:
 		raise NotImplementedError
 
-	def add_member(self, user: User) -> None:
-		self._members[user.sid] = user
+	def add_member(self, user: User) -> bool:
+		with self._lock:
+			if not self.is_open or self.is_member(user):
+				return False
+
+			self._members[user.sid] = user
+			return True
 
 	def is_member(self, user: User) -> bool:
-		return user.sid in self._members
+		with self._lock:
+			return user.sid in self._members
 
 	def remove_member(self, user: User) -> None:
-		self._members.pop(user.sid, None)
+		with self._lock:
+			self._members.pop(user.sid, None)
 
 	def remove(self) -> None:
-		type(self).all_rooms.pop(self.code, None)
+		with type(self)._room_lock:
+			type(self).all_rooms.pop(self.code, None)
 
+	_room_lock: ClassVar[RLock] = RLock()
 	all_rooms: ClassVar[dict[str, Any]] = {}
 
 	@classmethod
 	def create(cls, *args: Any, **kwargs: Any) -> Self:
-		key = cls.generate_room_code()
-		obj =  cls(key, *args, **kwargs)
-		cls.all_rooms[key] = obj
-		return obj
+		with cls._room_lock:
+			key = cls.generate_room_code()
+			obj =  cls(key, *args, **kwargs)
+			cls.all_rooms[key] = obj
+			return obj
 
 	@classmethod
 	def generate_room_code(cls, size: int=8) -> str:
@@ -108,19 +138,21 @@ class Room:
 
 	@classmethod
 	def find_by_code(cls, code: str) -> Self | None:
-		return cls.all_rooms.get(code)
+		with cls._room_lock:
+			return cls.all_rooms.get(code)
 
 	@classmethod
 	def find_open_room(cls) -> Self | None:
-		return next((r for r in cls.all_rooms.values() if r.is_open), None)
+		with cls._room_lock:
+			return next((r for r in cls.all_rooms.values() if r.is_open), None)
 
 	@classmethod
 	def find_open_room_by_type(cls, task_type: TaskType) -> Self | None:
-		return next(
-			(r for r in cls.all_rooms.values() if r.task_type == task_type and r.is_open), 
-			None
-		)
-
+		with cls._room_lock:
+			return next(
+				(r for r in cls.all_rooms.values() if r.task_type == task_type and r.is_open), 
+				None
+			)
 
 MAX_TASK_ATTEMPTS = 3
 MAX_ROUNDS = 10
@@ -136,70 +168,119 @@ class Match(Room):
 
 	@property
 	def ready_members(self) -> set[str]:
-		return self._ready
+		with self._lock:
+			return self._ready.copy()
 
 	@property 
 	def round(self) -> int:
-		return self._round
+		with self._lock:
+			return self._round
+
+	@property
+	def task(self) -> Task | None:
+		with self._lock:
+			return self._task
 
 	@property 
 	def is_finished(self) -> bool:
 		return self.round >= MAX_ROUNDS
-
-	@property
-	def all_ready(self) -> bool:
-		return (
-			len(self._members) == MAX_ROOM_MEMBERS and 
-			len(self._ready) == len(self._members)
-		)
 	
 	@property
 	def attempts(self) -> int:
-		return self._attempts
+		with self._lock:
+			return self._attempts
 
 	@property
 	def task_type(self) -> TaskType:
 		return self._task_type
 	
-	def create_task(self) -> Task:
+	def _create_task(self) -> Task:
 		self._task = choose_task(self._task_type)
 		return self._task
 
-	def process(self, value: str) -> tuple[Task, int, bool, bool]:
-		if self._task is None:
-			self.create_task()
+	def process(self, user: User, value: str) -> tuple[Task, int, bool, bool]:
+		with self._lock:
+			task = self._task or self._create_task()
 
-		success = self._task.check(value)
+			success = task.check(value)
+
+			self._attempts += 1
+
+			task_finished = success or self._attempts >= MAX_TASK_ATTEMPTS
+
+			if task_finished:
+				self._attempts = 0
+				self._round += 1
+				task = self._create_task()
+
+			finished = self._round >= MAX_ROUNDS
+
 		if success:
-			self._round += 1 
-			self._attempts = 0
+			user.add_points(10)
 
-			finished = self.is_finished
+		return task, self._attempts, success, finished
 
-			if not finished:
-				self._task = self.create_task()
-		else:
-			finished = False
-			self._attempts += 1 
-			if self.attempts >= MAX_TASK_ATTEMPTS:
-				self._task = self.create_task()
-				self._attempts = 0 
+	def ready(self, user: User) -> tuple[bool, Task | None]:
+		with self._lock:
+			if user.sid not in self._members:
+				return False, None
 
-		return self._task, self.attempts, success, finished
+			# 0 < self._round < MAX_ROUNDS
+			if 0 < self._round < MAX_ROUNDS:
+				return False, None
+
+			self._ready.add(user.sid)
+
+			all_ready = (
+				len(self._members) == MAX_ROOM_MEMBERS
+				and len(self._ready) == len(self._members)
+			)
+
+			if not all_ready:
+				return False, None
+
+			self._reset()
+			self.reset_scores()
+			task = self._create_task()
+
+			return True, task
 
 	def remove_member(self, user: User) -> None:
-		super().remove_member(user)
-		self._ready.discard(user.sid)
+		with self._lock:
+			super().remove_member(user)
+			self._ready.discard(user.sid)
 	
-	def reset(self) -> None:
+	def _reset(self) -> None:
 		self._round = 0
 		self._attempts = 0
 		self._task = None
 		self._ready.clear()
 
+	def reset_scores(self) -> None:
 		for m in self._members.values():
 			m.points = 0
 
-	def set_ready(self, user: User) -> None:
-		if self.is_member(user):
-			self._ready.add(user.sid)
+	def restart(self) -> Task:
+		with self._lock:
+			self._reset()
+			self.reset_scores()
+			return self._create_task()
+
+	@classmethod
+	def find_or_create(cls, task_type: TaskType | None = TaskType.RANDOM) -> Self:
+		with cls._room_lock:
+			room = next(
+				(
+					r for r in cls.all_rooms.values()
+					if (task_type is None or r.task_type == task_type)
+					and r.is_open
+				),
+				None
+			)
+
+			if room is None:
+				key = cls.generate_room_code()
+				room = cls(key, task_type or TaskType.RANDOM)
+				cls.all_rooms[key] = room
+
+			return room

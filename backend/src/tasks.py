@@ -22,9 +22,12 @@ class TaskType(StrEnum):
 	RANDOM = 'random'
 
 	@classmethod
-	def from_string(cls, stype: str) -> Self | None:
+	def from_string(cls, value: object) -> Self | None:
+		if not isinstance(value, str):
+			return None
+		
 		try: 
-			return cls(stype.lower()) 
+			return cls(value.lower()) 
 		except ValueError: 
 			return None
 
@@ -46,6 +49,9 @@ class Task:
 				return f'{self.left} {self.op} {self.right} = ?'
 
 	def check(self, value: str) -> bool:
+		if not isinstance(value, str):
+			return False
+
 		try:
 			value = value.strip()
 
@@ -67,17 +73,20 @@ class Task:
 				answer = int(value)
 
 			return answer == target
-		except ValueError:
+		except (TypeError, ValueError):
 			return False
 	
 	def to_dict(self) -> dict[str, Any]:
-		def serialize(value: Any) -> Any:
-			if isinstance(value, Fraction):
-				return str(value)
-			return value
+		# WARNING: 
+		# 	The complete result is returned.
+		
+		# def serialize(value: Any) -> Any:
+		# 	if isinstance(value, Fraction):
+		# 		return str(value)
+		# 	return value
 
 		return {
-			**{key: serialize(value) for key, value in asdict(self).items()},
+			# **{key: serialize(value) for key, value in asdict(self).items()},
 			'expr': str(self),
 		}
 
@@ -128,7 +137,7 @@ def _generate_numbers(task_type: TaskType) -> tuple[int, int]:
 			return a, b
 		case TaskType.SUBTRACT:
 			a = random.randint(2, 100)
-			b = random.randint(1, a)
+			b = random.randint(1, a - 1)
 			return a, b
 		case TaskType.REDUCE:
 			divisor = random.randint(2, 10)

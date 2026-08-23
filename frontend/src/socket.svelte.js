@@ -4,10 +4,22 @@ import { io } from "socket.io-client";
 class SocketState {
 	socket = $state(null);
 
-	connect() {
+	connect() { 	// async 
 		if (this.socket) return this.socket;
 
-		this.socket = io();
+		// try {
+		// 	let success = await fetch('/api/init', { credentials: 'include' })
+		// 		.then(resp => resp.ok)
+		// 	if (success) {
+		// 		console.log('Session successfully initialized.');
+		// 	}
+		// } catch(err) {
+		// 	console.log('Session could not be initialized.', err);
+		// }
+
+		this.socket = io({
+			withCredentials: true
+		});
 		return this.socket;
 	}
 
@@ -21,7 +33,7 @@ class SocketState {
 	}
 
 	leaveRoom() {
-		this.socket?.emit("leave", {});
+		this.socket?.emit("leave");
 	}
 
 	submitResult(result) {

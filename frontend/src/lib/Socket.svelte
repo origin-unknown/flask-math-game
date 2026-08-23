@@ -19,8 +19,8 @@
 		Object.assign(user, {});
 	}
 
-	onMount(() => {
-		const socket = socketState.connect();
+	onMount(() => { 	// async 
+		const socket = socketState.connect(); // await
 
 		socket.on("connect", () => {
 			console.log("Connected:", socket.id);

@@ -4,13 +4,20 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 // https://vite.dev/config/
 export default defineConfig({
   server: {
+    host: '127.0.0.1', 
+    port: 5173,
     proxy: {
       '/socket.io/': {
         target: 'http://127.0.0.1:5000',
         changeOrigin: true,
         secure: false,
         ws: true,
+        cookieDomainRewrite: "127.0.0.1", 
       },
+      // '/api': {
+      //   target: 'http://127.0.0.1:5000',
+      //   changeOrigin: true
+      // }, 
     }
   },
   plugins: [svelte()],
