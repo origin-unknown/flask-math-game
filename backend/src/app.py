@@ -7,8 +7,8 @@ WARNING:
 from flask import Flask, render_template, request, session
 # from flask_session import Session
 from flask_socketio import SocketIO, emit, join_room, leave_room
-from models import MAX_ROUNDS, Match as _Match, Room, User
-from tasks import TaskType 
+from models import MAX_ROUNDS, Match as _Match, User
+from tasklib.config import TASK_CONFIGS
 from typing import Any
 
 
@@ -38,7 +38,7 @@ def index():
 
 # @app.route('/dev')
 # def dev_index():
-# 	session.clear() # deprecated 
+# 	# session.clear() # deprecated 
 # 	return render_template('index.html') 
 
 # The session must be initialized within an endpoint.
@@ -47,31 +47,45 @@ def index():
 # 	session['_init'] = True
 # 	return '', 204
 
+@app.get('/api/task-options')
+def task_options():
+	return [
+		config.to_dict(name)
+		for name, config in TASK_CONFIGS.items()
+	] + [
+		{
+			'name': 'random',
+			'label': 'task_labels.random', 
+		}
+	]
 
-def room_data(room: Room) -> dict[str, Any]:
+
+def room_data(match: Match) -> dict[str, Any]:
 	return {
-		'state': 'open' if room.is_open else 'closed',
-		'code': room.code,
-		'type': room.task_type.value,
+		'state': 'open' if match.is_open else 'closed',
+		'code': match.code,
+		'type': match.task_type.value,
+		'name': match.task_label, 
+		'selection': match.selection, 
 		'members': [
 			{
 				'sid': member.sid,
 				'username': member.username,
 				'points': member.points,
 			}
-			for member in room.members.values()
+			for member in match.members.values()
 		],
 	}
 
-def member_data(room: Room) -> list[dict[str, Any]]:
+def member_data(match: _Match) -> list[dict[str, Any]]:
 	return [
 		{
 			'sid': m.sid, 
 			'username': m.username, 
 			'points': m.points, 
-			'ready': m.sid in room.ready_members
+			'ready': m.sid in match.ready_members
 		}
-		for m in room.members.values()
+		for m in match.members.values()
 	]
 
 
@@ -85,7 +99,7 @@ def on_disconnect():
 	user = User.find_by_sid(request.sid)
 	code = session.pop('code', None)
 
-	room = Room.find_by_code(code)
+	room = _Match.find_by_code(code)
 
 	if room is None:
 		user and user.remove()
@@ -120,7 +134,12 @@ def on_join(data):
 
 	username = data.get('username', '').strip()
 	roomcode = data.get('roomname', '').strip()
-	task_type = TaskType.from_string(data.get('tasktype', ''))
+	selection = data.get('tasktype', '')
+
+	if not isinstance(selection, str):
+		return
+
+	selection = selection.strip() or None
 
 	if not username:
 		return
@@ -143,7 +162,7 @@ def on_join(data):
 			room = None
 
 	if room is None:
-		room = _Match.find_or_create(task_type)
+		room = _Match.find_or_create(selection)
 
 	if not room.add_member(user):
 		user.remove()
@@ -199,7 +218,7 @@ def on_join(data):
 @socketio.on('leave')
 def on_leave():
 	user = User.find_by_sid(request.sid)
-	room = Room.find_by_code(session.pop('code', None))
+	room = _Match.find_by_code(session.pop('code', None))
 
 	if user is None or room is None:
 		return
@@ -228,7 +247,7 @@ def room_message(data):
 	if not isinstance(data, dict):
 		return
 
-	room = Room.find_by_code(session.get('code'))
+	room = _Match.find_by_code(session.get('code'))
 	if room is None:
 		return
 
@@ -253,7 +272,7 @@ def on_solve(data):
 
 	# Process the attempted solution here!
 	value = data.get('c', '')
-	# better move this to check. Problem blocking answers by spaming RETURN.
+	# Better move this to check. Problem blocking answers by spaming RETURN.
 	if not isinstance(value, str): 
 		return
 

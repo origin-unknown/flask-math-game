@@ -1,5 +1,9 @@
 import secrets, string
-from tasks import Task, TaskType, choose_task
+from tasklib.answer import check_answer
+from tasklib.config import TASK_CONFIGS
+from tasklib.generators import choose_task_by_name
+from tasklib.task import TaskLike, TaskType
+
 from threading import Lock, RLock
 from typing import Any, ClassVar, Self
 
@@ -147,10 +151,10 @@ class Room:
 			return next((r for r in cls.all_rooms.values() if r.is_open), None)
 
 	@classmethod
-	def find_open_room_by_type(cls, task_type: TaskType) -> Self | None:
+	def find_open_room_by_type(cls, selection: str) -> Self | None:
 		with cls._room_lock:
 			return next(
-				(r for r in cls.all_rooms.values() if r.task_type == task_type and r.is_open), 
+				(r for r in cls.all_rooms.values() if r.selection == selection and r.is_open), 
 				None
 			)
 
@@ -158,12 +162,21 @@ MAX_TASK_ATTEMPTS = 3
 MAX_ROUNDS = 10
 
 class Match(Room):
-	def __init__(self, code: str, task_type: TaskType=TaskType.RANDOM) -> None:
+	def __init__(self, code: str, selection: str = TaskType.RANDOM.value) -> None:
 		super().__init__(code)
+
+		if (
+			selection != TaskType.RANDOM.value
+			and selection not in TASK_CONFIGS
+		):
+			raise ValueError(
+				f"Unknown task selection: {selection}"
+			)
+
 		self._attempts = 0
 		self._round = 0
-		self._task: Task | None = None 
-		self._task_type = task_type
+		self._task: TaskLike | None = None 
+		self._selection = selection
 		self._ready: set[str] = set()
 
 	@property
@@ -191,18 +204,31 @@ class Match(Room):
 			return self._attempts
 
 	@property
+	def selection(self) -> str:
+		return self._selection
+
+	@property
 	def task_type(self) -> TaskType:
-		return self._task_type
-	
-	def _create_task(self) -> Task:
-		self._task = choose_task(self._task_type)
+		if self._selection == TaskType.RANDOM.value:
+			return TaskType.RANDOM
+
+		return TASK_CONFIGS[self._selection].task_type
+
+	@property
+	def task_label(self):
+		if self._selection == TaskType.RANDOM.value:
+			return 'task_labels.random'
+		return TASK_CONFIGS.get(self._selection).label
+
+	def _create_task(self) -> TaskLike:
+		self._task = choose_task_by_name(self._selection)
 		return self._task
 
 	def process(self, user: User, value: str) -> tuple[Task, int, bool, bool]:
 		with self._lock:
 			task = self._task or self._create_task()
 
-			success = task.check(value)
+			success = check_answer(task, value)
 
 			self._attempts += 1
 
@@ -211,7 +237,9 @@ class Match(Room):
 			if task_finished:
 				self._attempts = 0
 				self._round += 1
-				task = self._create_task()
+
+				if self.round < MAX_ROUNDS:
+					task = self._create_task()
 
 			finished = self._round >= MAX_ROUNDS
 
@@ -220,12 +248,11 @@ class Match(Room):
 
 		return task, self._attempts, success, finished
 
-	def ready(self, user: User) -> tuple[bool, Task | None]:
+	def ready(self, user: User) -> tuple[bool, TaskLike | None]:
 		with self._lock:
 			if user.sid not in self._members:
 				return False, None
 
-			# 0 < self._round < MAX_ROUNDS
 			if 0 < self._round < MAX_ROUNDS:
 				return False, None
 
@@ -260,19 +287,19 @@ class Match(Room):
 		for m in self._members.values():
 			m.points = 0
 
-	def restart(self) -> Task:
+	def restart(self) -> TaskLike:
 		with self._lock:
 			self._reset()
 			self.reset_scores()
 			return self._create_task()
 
 	@classmethod
-	def find_or_create(cls, task_type: TaskType | None = TaskType.RANDOM) -> Self:
+	def find_or_create(cls, selection: str | None = TaskType.RANDOM.value) -> Self:
 		with cls._room_lock:
 			room = next(
 				(
 					r for r in cls.all_rooms.values()
-					if (task_type is None or r.task_type == task_type)
+					if (selection is None or r.selection == selection)
 					and r.is_open
 				),
 				None
@@ -280,7 +307,7 @@ class Match(Room):
 
 			if room is None:
 				key = cls.generate_room_code()
-				room = cls(key, task_type or TaskType.RANDOM)
+				room = cls(key, selection or TaskType.RANDOM.value)
 				cls.all_rooms[key] = room
 
 			return room

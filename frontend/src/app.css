@@ -1,6 +1,6 @@
 :root {
 	--sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  
+	
 	font: 18px/145% var(--sans);
 }
 

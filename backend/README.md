@@ -1,6 +1,6 @@
-# Flask Math Game
+# Flask Math Game (Backend)
 
-A prototype of a turn-based math game for learning multiplication, based on chat rooms and written in Flask.
+A prototype of a turn-based math game, built using Flask and Svelte 5 and structured around chatrooms. LaTeX is used to display problems that multiple users can solve while competing against one another.
 
 ## Setup and run the app (Linux/MacOS)
 

@@ -1,5 +1,6 @@
 <script>
 	import { socketState } from '../socket.svelte';
+	import MathJax from './MathJax.svelte';
 
 	let { match } = $props();
 
@@ -20,10 +21,12 @@
 
 <form onsubmit={handleSubmit} class="task-form">
 	<div>
-		<span>{match.task.expr}</span>
+		<MathJax
+		  math={match.task.latex} 
+		/>
 	</div>
 	<div>
-		<input type="text" bind:value={result} bind:this={inputRef} pattern="\s*[0-9]+(?:\s*/\s*[0-9]+)?\s*" />
+		<input type="text" bind:value={result} bind:this={inputRef} pattern="\s*[+-]?[0-9]+(?:\s*/\s*[0-9]+)?\s*" />
 	</div>
 	<div>
 		<button type="submit" style="display: none;">Solve</button>

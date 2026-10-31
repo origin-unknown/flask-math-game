@@ -1,13 +1,66 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Flask Math Game</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+	<head>
+		<meta charset="UTF-8" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Flask Math Game</title>
+	</head>
+	<body>
+		<div id="app"></div>
+		<script>
+			window.MathJax = {
+				tex: {
+					inlineMath: [['$', '$'], ['\\(', '\\)']],
+					displayMath: [['$$', '$$'], ['\\[', '\\]']]
+				},
+				startup: {
+					typeset: false, 
+
+					ready() {
+						MathJax.startup.defaultReady();
+						MathJax.startup.document.options.a11y.inTabOrder = MathJax.startup.document.menu.settings.inTabOrder;
+						const tab = MathJax.startup.document.menu.menu.findID('Options', 'InTabOrder').variable;
+						tab.getting = () => this.getA11y('InTabOrder');
+						tab.setter = (value) => {
+							const menu = MathJax.startup.document.menu;
+							menu.settings.inTabOrder = value;
+							menu.setA11y({ inTabOrder: value });
+							menu.setTabOrder(value)
+							menu.saveUserSettings();
+						}
+					}
+				},
+				chtml: {
+					mtextInheritFont: true, 
+					matchFontHeight: true, 
+					scale: 1.2, 
+				},
+				options: {
+					enableMenu: false,
+					menuOptions: {
+						settings: {
+							inTabOrder: false, 
+							enrich: false, 
+						}
+					}
+				},
+				output: {
+					// font: 'mathjax-newcm'
+					// font: 'mathjax-asana'
+					// font: 'mathjax-bonum'
+					font: 'mathjax-dejavu'
+					// font: 'mathjax-fira'
+					// font: 'mathjax-modern'
+					// font: 'mathjax-pagella'
+					// font: 'mathjax-schola'
+					// font: 'mathjax-stix2'
+					// font: 'mathjax-termes'
+					// font: 'mathjax-tex'
+				},
+			};
+		</script>
+		<script defer src="/mathjax/tex-chtml.js"></script>
+		<script type="module" src="/src/main.js"></script>
+	</body>
 </html>

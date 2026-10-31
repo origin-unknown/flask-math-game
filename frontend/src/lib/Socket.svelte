@@ -1,11 +1,12 @@
 <script>
+	import { i18n } from '../i18n/i18n.js';
 	import { socketState } from '../socket.svelte';
 	import { room } from '../room.svelte';
 	import { user } from '../user.svelte';
 	import RoomGuard from './RoomGuard.svelte'
 	import RoomLogin from './RoomLogin.svelte'
 	import Roster from './Roster.svelte';
-	import Points from './Points.svelte';
+	import RoundOver from './RoundOver.svelte'
 	import GameRoom from './GameRoom.svelte'
 	import Countdown from './Countdown.svelte'
 	import { onMount } from 'svelte';
@@ -104,28 +105,28 @@
 			<div class="main-layout">
 				<div class="top-bar">
 					<div class="spacer"></div>
-					<div>Type: <span style="text-transform: capitalize;">{room.type}</span></div>
-					<div>Room: <span>{room.code}</span></div>
-					<div><button type="button" onclick={ leave }>Leave</button></div>
+					<div><span class="label">{ i18n.t('type_disp_label') }:</span><span>{i18n.t(room.name)}</span></div>
+					<div><span class="label">{ i18n.t('room_disp_label') }:</span> <span>{room.code}</span></div>
+					<div><button type="button" onclick={ leave }>{ i18n.t('leave_button_label') }</button></div>
 				</div>
 				<div class="main-container">
 					<div class="sidebar">
 						<Roster members={room.members} />
 					</div>
 					<div class="main-content">
-						<p>Room is open. Waiting for members.</p>
+						<p>{ i18n.t('room_waiting_msg') }</p>
 					</div>
 				</div>
-			</div>        
+			</div>
 		{/snippet}
 		{#snippet close()}
 			<div class="main-layout">
 				<div class="top-bar">
-					<Points points={user.points} />
+					<div><span class="label">{i18n.t('points_disp_label')}:</span> <span>{user.points}</span></div>
 					<div class="spacer"></div>
-					<div>Task: <span style="text-transform: capitalize;">{room.type}</span></div>
-					<div>Room: <span>{room.code}</span></div>
-					<div><button type="button" onclick={ leave }>Leave</button></div>
+					<div><span class="label">{ i18n.t('type_disp_label') }:</span> <span>{i18n.t(room.name)}</span></div>
+					<div><span class="label">{ i18n.t('room_disp_label') }:</span> <span>{room.code}</span></div>
+					<div><button type="button" onclick={ leave }>{ i18n.t('leave_button_label') }</button></div>
 				</div>
 				<div class="main-container">
 					<div class="sidebar">
@@ -133,41 +134,7 @@
 					</div>
 					<div class="main-content">
 						{#if gameOver}
-							<div class="game-over">
-								<h1>Congratulations!</h1>
-								<p>All {gameOver.rounds} rounds have been played.</p>
-
-								<h2>Score</h2>
-								<div class="results">
-									{#each gameOver.members.toSorted((a, b) => b.points - a.points) as member}
-										<div class="result-row">
-											<span>{member.username}</span>
-											<span>{member.points}</span>
-										</div>
-									{/each}
-								</div>
-
-								<h2>New round</h2>
-								<div style="margin-bottom: 1rem;">
-									{#each readyMembers as member}
-										<div>
-											{member.username}:
-											{#if member.ready}
-												<span>✓ ready</span>
-											{:else}
-												<span>is waiting…</span>
-											{/if}
-										</div>
-									{/each}
-								</div>
-
-								{#if readyMembers.find((m) => m.sid === user.sid)?.ready}
-									<p>You are ready. Waiting for the other player…</p>
-								{:else}
-									<button type="button" onclick={() => socketState.ready()}>Ready</button>
-								{/if}
-
-							</div>
+							<RoundOver gameOver={gameOver} readyMembers={readyMembers} />
 						{:else if match}
 							<Countdown>
 								{#snippet display()}
@@ -193,10 +160,23 @@
 
 .top-bar {
 	flex-shrink: 0; 
-	padding: 1.2rem 1rem; 
+	padding: 0rem 1rem;
 	border-bottom: 1px solid black;
 	display: flex; 
 	gap: 1rem;
+	font-size: 12pt;
+}
+
+.top-bar > * {
+	padding: 1rem 0rem; 
+	display: flex;
+	gap: 2px;
+	justify-content: center;
+	align-items: center;
+}
+
+.label {
+	font-weight: 600;
 }
 
 .main-container {
@@ -223,28 +203,6 @@
 
 .spacer {
 	flex-grow: 1;
-}
-
-.game-over {
-	text-align: center;
-	width: min(500px, 90%);
-}
-
-.results {
-	margin: 1rem 0;
-	border: 1px solid black;
-	border-radius: 3px;
-}
-
-.result-row {
-	display: flex;
-	justify-content: space-between;
-	padding: 0.64rem;
-	border-bottom: 1px solid #ddd;
-}
-
-.result-row:last-child {
-	border-bottom: none;
 }
 
 </style>

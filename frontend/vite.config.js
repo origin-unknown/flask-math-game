@@ -14,10 +14,10 @@ export default defineConfig({
         ws: true,
         cookieDomainRewrite: "127.0.0.1", 
       },
-      // '/api': {
-      //   target: 'http://127.0.0.1:5000',
-      //   changeOrigin: true
-      // }, 
+      '/api': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: true
+      }, 
     }
   },
   plugins: [svelte()],

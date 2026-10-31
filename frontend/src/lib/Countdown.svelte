@@ -1,5 +1,4 @@
 <script>
-
 	let { display } = $props();
 
 	let count = $state(10);

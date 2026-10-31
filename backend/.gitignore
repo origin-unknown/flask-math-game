@@ -162,5 +162,6 @@ cython_debug/
 #.idea/
 
 .DS_Store
+snippets
 src/static/
 flask_session

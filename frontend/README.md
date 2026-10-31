@@ -41,3 +41,22 @@ If you have state that's important to retain within a component, consider creati
 import { writable } from 'svelte/store'
 export default writable(0)
 ```
+
+## Install MathJAX
+
+```bash
+npm install mathjax
+
+# mkdir -p public/mathjax
+# cp -R node_modules/mathjax/* public/mathjax/
+# or 
+npm run copy-mathjax
+```
+
+## Update used packages 
+
+```bash
+npx npm-check-updates -u
+npm install
+npm run copy-mathjax
+```

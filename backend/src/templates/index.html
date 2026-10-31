@@ -67,20 +67,26 @@
 		<div class="top-bar">
 			<form name="user-form" style="display: inline;">
 				<label for="username">Username</label>
-				<input id="username" name="username" placeholder="Username" />
+				<input id="username" name="username" placeholder="Username" autocomplete="off" />
 				<label for="tasktype">Task</label>
 				<select id="tasktype" name="tasktype">
 					<option value="" disabled selected>Select a room type</option>
-					<option value="add">Addition</option>
-					<option value="subtract">Subtraction</option> 
-					<option value="multiply">Multiplication</option>
-					<option value="divide">Division</option>
-					<option value="reduce">Reduce Fractions</option>
-					<option value="equation">Equations</option>
+					<option value="small_multiplication">Basic Multiplication Table</option>
+					<option value="small_division">Basic Multiplication Table (Division)</option> 
+					<option value="small_addition">Plus up to 10</option>
+					<option value="mid_addition">Plus up to 100</option>
+					<option value="large_addition">Plus up to ±100</option>
+					<option value="small_subtraction">Minus up to 10</option>
+					<option value="mid_subtraction">Minus up to 100</option>
+					<option value="large_subtraction">Minus up to ±100</option>
+					<option value="fraction_reduction">Reduce Fractions</option>
+					<option value="easy_equations">Simple equations</option>
+					<option value="medium_equations">Equations with parentheses</option>
+					<option value="hard_equations">Difficult equations</option>
 					<option value="random">Random</option>
 				</select>
 				<label for="roomname">Roomname</label>
-				<input id="roomname" name="roomname" placeholder="Roomname" />
+				<input id="roomname" name="roomname" placeholder="Roomname" autocomplete="off" />
 				<button type="submit">Join room</button>
 			</form>
 			 | 
@@ -92,7 +98,7 @@
 		<div id="main" class="main-layout">
 			<div id="chat" class="sidebar">
 				<form name="msg-form" style="display: flex; gap: 8px; width: 100%;">
-					<input id="msg" name="msg" placeholder="Message" style="flex: 1" />
+					<input id="msg" name="msg" placeholder="Message" style="flex: 1" autocomplete="off" />
 					<button type="submit" style="flex-shrink: 0;">Send</button>
 				</form>
 				<ul id="messages"></ul>
@@ -111,6 +117,7 @@
 	<script>
 		(() => {
 			const socket = io(); 
+			let user = {};
 
 			socket.on('message', data => {
 				const li = document.createElement('li');
@@ -134,15 +141,14 @@
 				document.querySelector('form[name="user-form"]').roomname.value = data.code;
 			});
 
-
 			socket.on('task', data => {
 				const html = `
 				<form name="task">
 					<div>
-						<span>${data.task.expr}</span>
+						<span>$$${data.task.latex}$$</span>
 					</div>
 					<div>
-						<input type="text" name="result" value="" pattern="\s*[0-9]+(?:\s*/\s*[0-9]+)?\s*" />
+						<input type="text" name="result" value="" autocomplete="off" />
 					</div>
 					<div>
 						<button type="submit" style="display: none;">Solve</button>
@@ -150,8 +156,15 @@
 				</form>
 				`;
 
-				document.querySelector('#stage').innerHTML = html;
-				form = document.querySelector('form[name="task"]');
+				const node = document.querySelector('#stage')
+
+				MathJax.typesetClear([node]);
+				node.innerHTML = html;
+				MathJax.typesetPromise([node]).then(() => {
+					// the new content has been typeset
+				});
+
+				const form = document.querySelector('form[name="task"]');
 				form.addEventListener('submit', event => {
 						event.preventDefault();
 						const formData = new FormData(event.target);
@@ -162,7 +175,14 @@
 			});
 
 			socket.on('user', data => {
-				document.querySelector('#points').innerText = data.points;
+				Object.assign(user, data);
+				document.querySelector('#points').innerText = 0;
+			});
+
+			socket.on('score', data => {
+				if (user && user.sid === data.sid) {
+					document.querySelector('#points').innerText = data.points;
+				}
 			});
 
 
@@ -172,12 +192,22 @@
 					const formData = new FormData(event.target);
 					const username = formData.get('username');
 					const roomname = formData.get('roomname');
-					const tasktype = formData.get('tasktype');
+					const tasktype = formData.get('tasktype') || '';
 					socket.emit('join', {username, roomname, tasktype});
 				});
 
 			document.getElementById('btn-leave')
-				.addEventListener('click', () => socket.emit('leave', {}));
+				.addEventListener('click', () => {
+					socket.emit('leave')
+					Object.assign(user, {});
+					document.querySelector('#stage').innerHTML = `
+						<div class="waiting-screen active">
+							<p style="text-align: center;">Enter your username, 
+							join a random or specific room, and wait for other members. <br />
+							You can share the room name to invite other members.</p>
+						</div>
+					`;
+				});
 
 			document.querySelector('form[name="msg-form"]')
 				.addEventListener('submit', event => {
@@ -190,5 +220,58 @@
 
 		})();
 	</script>
+	<script>
+		window.MathJax = {
+			tex: {
+				inlineMath: [['$', '$'], ['\\(', '\\)']],
+				displayMath: [['$$', '$$'], ['\\[', '\\]']]
+			},
+			startup: {
+				typeset: false, 
+
+				ready() {
+					MathJax.startup.defaultReady();
+					MathJax.startup.document.options.a11y.inTabOrder = MathJax.startup.document.menu.settings.inTabOrder;
+					const tab = MathJax.startup.document.menu.menu.findID('Options', 'InTabOrder').variable;
+					tab.getting = () => this.getA11y('InTabOrder');
+					tab.setter = (value) => {
+						const menu = MathJax.startup.document.menu;
+						menu.settings.inTabOrder = value;
+						menu.setA11y({ inTabOrder: value });
+						menu.setTabOrder(value)
+						menu.saveUserSettings();
+					}
+				}
+			},
+			chtml: {
+				mtextInheritFont: true, 
+				matchFontHeight: true, 
+				scale: 1.2, 
+			},
+			options: {
+				enableMenu: false,
+				menuOptions: {
+					settings: {
+						inTabOrder: false, 
+						enrich: false, 
+					}
+				}
+			},
+			output: {
+				// font: 'mathjax-newcm'
+				// font: 'mathjax-asana'
+				// font: 'mathjax-bonum'
+				font: 'mathjax-dejavu'
+				// font: 'mathjax-fira'
+				// font: 'mathjax-modern'
+				// font: 'mathjax-pagella'
+				// font: 'mathjax-schola'
+				// font: 'mathjax-stix2'
+				// font: 'mathjax-termes'
+				// font: 'mathjax-tex'
+			},
+		};
+	</script>
+	<script defer src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
 </body>
 </html>
