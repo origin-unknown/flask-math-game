@@ -23,6 +23,10 @@ export default defineConfig({
   plugins: [svelte()],
   build: {
     outDir: '../backend/src/static',
-    emptyOutDir: true
+    emptyOutDir: true, 
+    // Add MathJAX License manually!!!
+    license: {
+      fileName: 'licenses.md' 
+    }
   }
 })
